@@ -1,0 +1,7 @@
+__pycache__
+.spyproject
+archive/
+private/
+readings/
+paper/
+*.emf
