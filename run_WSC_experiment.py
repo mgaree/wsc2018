@@ -9,10 +9,11 @@ import pickle
 
 from DOEMultiProcBatchRunner import DOEMultiProcBatchRunner
 from model_wsc import WSCModel
+from data_handler import DataHandler
 
 
 design_filename = 'design_matrix_WSC2018.csv'
-output_file_prefix = 'C:/Users/Mike/Desktop/tmp/wsc_data/wsc2018_'
+output_file_prefix = 'C:/Users/Mike/Desktop/tmp/wsc_data/trial_data/'
 collect_stepwise_data = True
 
 
@@ -31,6 +32,7 @@ def run_experiment(test_run=True):
         collect_stepwise_data,
         iterations=replications,
         max_steps=max_steps,
+        data_handler=DataHandler(output_file_prefix),
         # WSCModel uses stepwise datacollection, so don't need br-level
         # agent_ and model_ reporters
         )
@@ -59,18 +61,9 @@ def run_trial_one_rep(trial_num, seed, test_run=True):
 if __name__ == '__main__':
     print("{} - Experiment started".format(str(datetime.now())))
 
-    res = run_experiment(test_run=False)
+    res = run_experiment(test_run=True)
 
     print("{} - Batch run complete".format(str(datetime.now())))
-
-    # Gather stepwise dataframes from br
-    datadict = res.get_model_instance_dataframes()
-
-    print("{} - Data frames constructed".format(str(datetime.now())))
-
-    dfs = ['sw_model_df',]# 'sw_agent_df']
-    for k in dfs:
-        datadict[k].to_csv(output_file_prefix+k+'.csv', float_format='%g', chunksize=1000)
 
     # I don't have a current need for this data, so just get it saved somewhere
 #    with open(output_file_prefix+'tables.pickle.txt', 'wb') as f:
@@ -83,8 +76,3 @@ if __name__ == '__main__':
     print("{} - Data saved".format(str(datetime.now())))
     print()
     print("Complete.")
-
-    # See archive/big_dataframe_to_small_files.py for converting one giant dataframe
-    # into per-replication files
-    # TODO revise experiment runner to do that natively--smaller datacollection instance
-    # will likely speed up execution.

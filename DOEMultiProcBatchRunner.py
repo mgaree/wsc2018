@@ -5,7 +5,6 @@ Batch Runner for WSC 2018 paper. Adapts original mesa.batchrunner by:
 - Uses DOE design matrix as input instead of full-factorial parameter list
 - Uses multiprocessing
 - Supports data collection from model's own DataCollector (e.g. step-wise data)
-- TODO: write data to sqlite3 db each iteration, instead of writing whole experiment at end
 
 """
 
@@ -59,12 +58,16 @@ class DOEMultiProcBatchRunner(BatchRunner):
             to calling the model/agent reporters passed to this constructor.
             If False, data is collected only at end of run via the model/agent
             reporters passed to the batch runner constructor.
+        data_handler (object or None): Custom processor for simulation data,
+            chiefly used to write data to sqlite database in real time instead
+            of to csv file at end of experiment. If None, use internal data
+            handling.
 
     See https://github.com/projectmesa/mesa/blob/master/mesa/batchrunner.py
     for further details.
 
     """
-    def __init__(self, model_cls, design, collect_stepwise_data, **kwargs):
+    def __init__(self, model_cls, design, collect_stepwise_data, data_handler, **kwargs):
         # I don't use variable_parameters for DOE mode, but need to init to avoid error
         kwargs['variable_parameters'] = dict()
 
@@ -79,6 +82,8 @@ class DOEMultiProcBatchRunner(BatchRunner):
         self.collect_stepwise_data = collect_stepwise_data
         if self.collect_stepwise_data:
             self.stepwise_vars = {}
+
+        self.data_handler = data_handler
 
         if 'replications' not in self.design.columns:
             # Insert `replications` column into design and set all values to
@@ -127,7 +132,6 @@ class DOEMultiProcBatchRunner(BatchRunner):
                 job_queue.append(pool.uimap(
                     self._run_single_replication, (model_seed,), (kwargs,), (model_key,)))
 
-
         with tqdm(total=total_iterations, desc='Total', unit='dp',
                   disable=not self.display_progress) as pbar_total:
             # empty the queue
@@ -137,7 +141,15 @@ class DOEMultiProcBatchRunner(BatchRunner):
                     results.append((model_vars, agent_vars, stepwise_vars))
                 pbar_total.update()
 
+        if self.data_handler:
+            return  # Results already stored to database, nothing more to record
+
         # store the results in batchrunner
+        # FUTURE: rework this module to only support external data_handler.
+        # Rationale: Best practice to treat each replication atomically. Key
+        # benefit of having all replications in memory is to do experiment-wide
+        # analysis, and a data analysis module can read in all per-replication
+        # files.
         for model_vars, agent_vars, stepwise_vars in results:
             if self.model_reporters:
                 for model_key, model_val in model_vars.items():
@@ -164,7 +176,11 @@ class DOEMultiProcBatchRunner(BatchRunner):
         stepwise_vars = {}
 
         # Collect and store results:
-        if self.model_reporters:
+        if self.data_handler:  # Using external data handler
+            self.data_handler.handle_single_replication(model, model_key)
+            return (None, None, None)  # 3-tuple aligns with what run_all expects
+
+        if self.model_reporters:  # Saving results in memory for post-run storage
             model_vars[model_key] = dict(
                 **self.collect_model_vars(model))
         if self.agent_reporters:

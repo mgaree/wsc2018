@@ -5,6 +5,8 @@ proper RNG stream management.
 
 """
 
+from functools import partial
+
 from enum import IntEnum, auto
 import numpy as np
 import mesa
@@ -164,12 +166,9 @@ class WSCModel:
         must be dynamically created.
 
         """
-        def _nice_X_j_formatter(X_j):
-            # X_j is a np.array. I want to format it as a string; each number gets the %3.5e format;
-            # elements are space separated, and the list is enclosed in [ ]
-            return str(['{:g}'.format(i) for i in X_j.tolist()]).replace(', ', ' ').replace("'", "")
-
-        model_reporters = {'Y': 'Y', 'X_j': lambda m: _nice_X_j_formatter(m.X_j)}
+        model_reporters = {'Y': 'Y'}
+        model_reporters.update(
+                {'X_{}'.format(i+1): partial(lambda m, i: m.X_j[i], i=i) for i in range(self.d_i_max)})
 
         # Commenting out because stepwise agent data is not currently needed
 #        agent_reporters = {
@@ -235,8 +234,6 @@ class WSCModel:
         """
         self.Y = sum([a.y_i for a in self.agents])
 
-        # This approach means I need to unpack X_j for analysis, but avoids
-        # storage space of ,,,,,,,,... caused by varying column count per trial
         self.X_j = np.zeros(self.d_i_max)
         for agent in self.agents:
             for i, x_j in enumerate(agent.x_ij):
